@@ -16,15 +16,20 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
+            
+        ]);
+
+        $data = $request->validate([
             'email' => 'required|email',
             'password' => 'required|string|min:4',
         ]);
-        if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
+
+        if (! $token =  auth()->attempt($data)) {
+            return response()->json([
+                'message' => 'Invalid Credentials'
+            ], 422);
         }
-        if (! $token = auth()->attempt($validator->validated())) {
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
+
         return $this->createNewToken($token);
     }
 
@@ -34,13 +39,14 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:100|unique:users',
             'password' => 'required|string|confirmed|min:6',
         ]);
-        if($validator->fails()){
-            return response()->json($validator->errors()->toJson(), 400);
-        }
-        $user = User::create(array_merge(
-                    $validator->validated(),
-                    ['password' => bcrypt($request->password)]
-                ));
+
+        $data = $request->validate([
+            'name' => 'required|string|between:2,100',
+            'email' => 'required|string|email|max:100|unique:users',
+            'password' => 'required|string|confirmed|min:6',
+        ]);
+
+        $user = User::create(array_merge($data, ['password' => bcrypt($request->password)]));
         return response()->json([
             'message' => 'User successfully registered',
             'user' => $user
@@ -77,7 +83,11 @@ class AuthController extends Controller
             'access_token' => $token,
             'token_type' => 'bearer',
             'expires_in' => auth()->factory()->getTTL() * 60,
-            'user' => auth()->user()
+            'user' => array_merge(auth()->user()->only(['id', 'name', 'email', 'created_at']), [
+                'permissions' => auth()->user()->permissions->map(function($permission) {
+                    return $permission->name;
+                })
+            ]),
         ]);
     }
 
